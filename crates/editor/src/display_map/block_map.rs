@@ -344,6 +344,7 @@ pub enum Block {
         height: u32,
     },
     ExcerptBoundary {
+        prev_excerpt: Option<ExcerptInfo>,
         excerpt: ExcerptInfo,
         height: u32,
     },
@@ -481,8 +482,13 @@ impl Debug for Block {
                 .field("first_excerpt", &first_excerpt)
                 .field("height", height)
                 .finish(),
-            Self::ExcerptBoundary { excerpt, height } => f
+            Self::ExcerptBoundary {
+                prev_excerpt,
+                excerpt,
+                height,
+            } => f
                 .debug_struct("ExcerptBoundary")
+                .field("prev_excerpt", prev_excerpt)
                 .field("excerpt", excerpt)
                 .field("height", height)
                 .finish(),
@@ -1231,6 +1237,7 @@ impl BlockMap {
                 } else if excerpt_boundary.prev.is_some() {
                     height += self.excerpt_header_height;
                     Block::ExcerptBoundary {
+                        prev_excerpt: excerpt_boundary.prev,
                         excerpt: excerpt_boundary.next,
                         height,
                     }

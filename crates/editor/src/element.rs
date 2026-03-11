@@ -47,9 +47,9 @@ use gpui::{
     MouseDownEvent, MouseMoveEvent, MousePressureEvent, MouseUpEvent, PaintQuad, ParentElement,
     Pixels, PressureStage, ScrollDelta, ScrollHandle, ScrollWheelEvent, ShapedLine, SharedString,
     Size, StatefulInteractiveElement, Style, Styled, StyledText, TextAlign, TextRun,
-    TextStyleRefinement, WeakEntity, Window, anchored, deferred, div, fill, linear_color_stop,
-    linear_gradient, outline, pattern_slash, point, px, quad, relative, size, solid_background,
-    transparent_black,
+    TextStyleRefinement, UnderlineStyle, WeakEntity, Window, anchored, canvas, deferred, div, fill,
+    linear_color_stop, linear_gradient, outline, pattern_slash, point, px, quad, relative, size,
+    solid_background, transparent_black,
 };
 use itertools::Itertools;
 use language::{IndentGuideSettings, language_settings::ShowWhitespaceSetting};
@@ -3367,7 +3367,7 @@ impl EditorElement {
         window: &mut Window,
         cx: &mut App,
     ) -> Vec<Option<(AnyElement, gpui::Point<Pixels>)>> {
-        if self.editor.read(cx).disable_expand_excerpt_buttons {
+        if self.editor.read(cx).disable_expand_excerpt_buttons || self.split_side.is_some() {
             return vec![];
         }
 
@@ -4006,22 +4006,63 @@ impl EditorElement {
                 result.into_any_element()
             }
 
-            Block::ExcerptBoundary { .. } => {
-                let color = cx.theme().colors().clone();
-                let mut result = v_flex().id(block_id).w_full();
+            Block::ExcerptBoundary {
+                prev_excerpt,
+                excerpt,
+                ..
+            } => {
+                let border_color = cx.theme().colors().border_variant;
 
-                result = result.child(
-                    h_flex().relative().child(
-                        div()
-                            .top(line_height / 2.)
-                            .absolute()
-                            .w_full()
-                            .h_px()
-                            .bg(color.border_variant),
-                    ),
-                );
+                let next_excerpt_id = excerpt.id;
+                let prev_excerpt_id = prev_excerpt.as_ref().map(|e| e.id);
+                let editor = self.editor.clone();
+                let wavy_line = canvas(
+                    move |_, _, _| {},
+                    move |bounds, _, window, _| {
+                        let underline_style = UnderlineStyle {
+                            thickness: px(3.0),
+                            color: Some(border_color),
+                            wavy: true,
+                        };
+                        let wavy_height = underline_style.thickness * 3.;
+                        let origin = point(
+                            bounds.origin.x,
+                            bounds.origin.y + line_height / 2. - wavy_height / 2.,
+                        );
+                        window.paint_underline(origin, bounds.size.width, &underline_style);
+                    },
+                )
+                .w_full()
+                .h(line_height);
 
-                result.into_any()
+                div()
+                    .id(block_id)
+                    .w_full()
+                    .cursor_pointer()
+                    .tooltip(Tooltip::for_action_title(
+                        "Expand Excerpt",
+                        &crate::actions::ExpandExcerpts::default(),
+                    ))
+                    .on_click(move |_, window, cx| {
+                        editor.update(cx, |editor, cx| {
+                            editor.expand_excerpt(
+                                next_excerpt_id,
+                                ExpandExcerptDirection::Up,
+                                window,
+                                cx,
+                            );
+                            if let Some(prev_id) = prev_excerpt_id {
+                                editor.expand_excerpt(
+                                    prev_id,
+                                    ExpandExcerptDirection::Down,
+                                    window,
+                                    cx,
+                                );
+                            }
+                        });
+                    })
+                    .child(wavy_line)
+                    .into_any()
             }
 
             Block::BufferHeader { excerpt, height } => {
