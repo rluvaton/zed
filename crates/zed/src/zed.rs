@@ -40,7 +40,7 @@ use gpui::{
 };
 use image_viewer::ImageInfo;
 use language::Capability;
-use language_onboarding::BasedPyrightBanner;
+use language_onboarding::{BasedPyrightBanner, RustUnlinkedFileBanner};
 use language_tools::lsp_button::{self, LspButton};
 use language_tools::lsp_log_view::LspLogToolbarItemView;
 use markdown::{Markdown, MarkdownElement, MarkdownFont, MarkdownStyle};
@@ -1212,6 +1212,9 @@ fn initialize_pane(
             toolbar.add_item(agent_diff_toolbar, window, cx);
             let basedpyright_banner = cx.new(|cx| BasedPyrightBanner::new(workspace, cx));
             toolbar.add_item(basedpyright_banner, window, cx);
+            let rust_unlinked_banner =
+                cx.new(|cx| RustUnlinkedFileBanner::new(workspace, cx));
+            toolbar.add_item(rust_unlinked_banner, window, cx);
             let image_view_toolbar = cx.new(|_| image_viewer::ImageViewToolbarControls::new());
             toolbar.add_item(image_view_toolbar, window, cx);
         })

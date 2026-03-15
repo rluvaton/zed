@@ -9,21 +9,20 @@ license = "GPL-3.0-or-later"
 workspace = true
 
 [lib]
-path = "src/python.rs"
+path = "src/language_onboarding.rs"
 
 [features]
 default = []
 
 [dependencies]
+anyhow.workspace = true
 db.workspace = true
 editor.workspace = true
 gpui.workspace = true
+language.workspace = true
+log.workspace = true
+lsp.workspace = true
 project.workspace = true
 ui.workspace = true
+util.workspace = true
 workspace.workspace = true
-
-# Uncomment other workspace dependencies as needed
-# assistant.workspace = true
-# client.workspace = true
-# project.workspace = true
-# settings.workspace = true
