@@ -41,18 +41,18 @@ use git::{Oid, blame::BlameEntry, commit::ParsedCommitMessage, status::FileStatu
 use gpui::{
     Action, Along, AnyElement, App, AppContext, AvailableSpace, Axis as ScrollbarAxis, BorderStyle,
     Bounds, ClickEvent, ClipboardItem, ContentMask, Context, Corner, Corners, CursorStyle,
-    DispatchPhase, Edges, Element, ElementInputHandler, Entity, Focusable as _, FontId, FontWeight,
-    GlobalElementId, Hitbox, HitboxBehavior, Hsla, InteractiveElement, IntoElement, IsZero,
-    KeybindingKeystroke, Length, Modifiers, ModifiersChangedEvent, MouseButton, MouseClickEvent,
-    MouseDownEvent, MouseMoveEvent, MousePressureEvent, MouseUpEvent, PaintQuad, ParentElement,
-    Pixels, PressureStage, ScrollDelta, ScrollHandle, ScrollWheelEvent, ShapedLine, SharedString,
-    Size, StatefulInteractiveElement, Style, Styled, StyledText, TextAlign, TextRun,
+    DispatchPhase, Edges, Element, ElementInputHandler, Entity, Focusable as _, Font, FontId,
+    FontWeight, GlobalElementId, Hitbox, HitboxBehavior, Hsla, InteractiveElement, IntoElement,
+    IsZero, KeybindingKeystroke, Length, Modifiers, ModifiersChangedEvent, MouseButton,
+    MouseClickEvent, MouseDownEvent, MouseMoveEvent, MousePressureEvent, MouseUpEvent, PaintQuad,
+    ParentElement, Pixels, PressureStage, ScrollDelta, ScrollHandle, ScrollWheelEvent, ShapedLine,
+    SharedString, Size, StatefulInteractiveElement, Style, Styled, StyledText, TextAlign, TextRun,
     TextStyleRefinement, UnderlineStyle, WeakEntity, Window, anchored, canvas, deferred, div, fill,
     linear_color_stop, linear_gradient, outline, pattern_slash, point, px, quad, relative, size,
     solid_background, transparent_black,
 };
 use itertools::Itertools;
-use language::{IndentGuideSettings, language_settings::ShowWhitespaceSetting};
+use language::{HighlightedText, IndentGuideSettings, language_settings::ShowWhitespaceSetting};
 use markdown::Markdown;
 use multi_buffer::{
     Anchor, ExcerptId, ExcerptInfo, ExpandExcerptDirection, ExpandInfo, MultiBufferPoint,
@@ -98,7 +98,7 @@ use util::{RangeExt, ResultExt, debug_panic};
 use workspace::{
     CollaboratorId, ItemHandle, ItemSettings, OpenInTerminal, OpenTerminal, RevealInProjectPanel,
     Workspace,
-    item::{BreadcrumbText, Item, ItemBufferKind},
+    item::{Item, ItemBufferKind},
 };
 
 /// Determines what kinds of highlights should be applied to a lines background.
@@ -1255,7 +1255,7 @@ impl EditorElement {
         let gutter_hitbox = &position_map.gutter_hitbox;
         let modifiers = event.modifiers;
         let text_hovered = text_hitbox.is_hovered(window);
-        let gutter_hovered = gutter_hitbox.bounds.contains(&event.position);
+        let gutter_hovered = gutter_hitbox.is_hovered(window);
         editor.set_gutter_hovered(gutter_hovered, cx);
         editor.show_mouse_cursor(cx);
 
@@ -1474,6 +1474,7 @@ impl EditorElement {
         if text_hovered {
             editor.update_hovered_link(
                 point_for_position,
+                Some(event.position),
                 &position_map.snapshot,
                 modifiers,
                 window,
@@ -1485,12 +1486,13 @@ impl EditorElement {
                     .snapshot
                     .buffer_snapshot()
                     .anchor_before(point.to_offset(&position_map.snapshot, Bias::Left));
-                hover_at(editor, Some(anchor), window, cx);
+                hover_at(editor, Some(anchor), Some(event.position), window, cx);
                 Self::update_visible_cursor(editor, point, position_map, window, cx);
             } else {
                 editor.update_inlay_link_and_hover_points(
                     &position_map.snapshot,
                     point_for_position,
+                    Some(event.position),
                     modifiers.secondary(),
                     modifiers.shift,
                     window,
@@ -1499,7 +1501,7 @@ impl EditorElement {
             }
         } else {
             editor.hide_hovered_link(cx);
-            hover_at(editor, None, window, cx);
+            hover_at(editor, None, Some(event.position), window, cx);
         }
     }
 
@@ -3287,9 +3289,9 @@ impl EditorElement {
                 snapshot.display_point_to_point(DisplayPoint::new(range.end, 0), Bias::Right);
 
             editor
-                .tasks
-                .iter()
-                .filter_map(|(_, tasks)| {
+                .runnables
+                .all_runnables()
+                .filter_map(|tasks| {
                     let multibuffer_point = tasks.offset.to_point(&snapshot.buffer_snapshot());
                     if multibuffer_point < offset_range_start
                         || multibuffer_point > offset_range_end
@@ -7992,7 +7994,8 @@ impl EditorElement {
 }
 
 pub fn render_breadcrumb_text(
-    mut segments: Vec<BreadcrumbText>,
+    mut segments: Vec<HighlightedText>,
+    breadcrumb_font: Option<Font>,
     prefix: Option<gpui::AnyElement>,
     active_item: &dyn ItemHandle,
     multibuffer_header: bool,
@@ -8012,17 +8015,16 @@ pub fn render_breadcrumb_text(
     if suffix_start_ix > prefix_end_ix {
         segments.splice(
             prefix_end_ix..suffix_start_ix,
-            Some(BreadcrumbText {
+            Some(HighlightedText {
                 text: "⋯".into(),
-                highlights: None,
-                font: None,
+                highlights: vec![],
             }),
         );
     }
 
     let highlighted_segments = segments.into_iter().enumerate().map(|(index, segment)| {
         let mut text_style = window.text_style();
-        if let Some(ref font) = segment.font {
+        if let Some(font) = &breadcrumb_font {
             text_style.font_family = font.family.clone();
             text_style.font_features = font.features.clone();
             text_style.font_style = font.style;
@@ -8039,7 +8041,7 @@ pub fn render_breadcrumb_text(
         }
 
         StyledText::new(segment.text.replace('\n', " "))
-            .with_default_highlights(&text_style, segment.highlights.unwrap_or_default())
+            .with_default_highlights(&text_style, segment.highlights)
             .into_any()
     });
 
@@ -8149,13 +8151,13 @@ pub fn render_breadcrumb_text(
 }
 
 fn apply_dirty_filename_style(
-    segment: &BreadcrumbText,
+    segment: &HighlightedText,
     text_style: &gpui::TextStyle,
     cx: &App,
 ) -> Option<gpui::AnyElement> {
     let text = segment.text.replace('\n', " ");
 
-    let filename_position = std::path::Path::new(&segment.text)
+    let filename_position = std::path::Path::new(segment.text.as_ref())
         .file_name()
         .and_then(|f| {
             let filename_str = f.to_string_lossy();
@@ -8525,8 +8527,12 @@ pub(crate) fn render_buffer_header(
                                         el.child(Icon::new(IconName::FileLock).color(Color::Muted))
                                     })
                                     .when_some(breadcrumbs, |then, breadcrumbs| {
+                                        let font = theme::ThemeSettings::get_global(cx)
+                                            .buffer_font
+                                            .clone();
                                         then.child(render_breadcrumb_text(
                                             breadcrumbs,
+                                            Some(font),
                                             None,
                                             editor_handle,
                                             true,
