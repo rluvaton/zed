@@ -9500,14 +9500,19 @@ dependencies = [
  "anyhow",
  "db",
  "editor",
+ "fs",
  "gpui",
  "language",
  "log",
  "lsp",
  "project",
+ "serde_json",
+ "settings",
+ "theme",
  "ui",
  "util",
  "workspace",
+ "zlog",
 ]
 
 [[package]]

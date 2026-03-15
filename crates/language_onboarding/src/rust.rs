@@ -13,18 +13,18 @@ use workspace::{ToolbarItemEvent, ToolbarItemLocation, ToolbarItemView, Workspac
 const UNLINKED_FILE_DIAGNOSTIC_CODE: &str = "unlinked-file";
 
 pub struct RustUnlinkedFileBanner {
-    dismissed: bool,
-    has_unlinked_diagnostic: bool,
-    current_file_info: Option<UnlinkedFileInfo>,
+    pub(crate) dismissed: bool,
+    pub(crate) has_unlinked_diagnostic: bool,
+    pub(crate) current_file_info: Option<UnlinkedFileInfo>,
     active_buffer: Option<Entity<Buffer>>,
     project: WeakEntity<Project>,
     _subscriptions: Vec<Subscription>,
 }
 
-struct UnlinkedFileInfo {
-    file_stem: String,
+pub(crate) struct UnlinkedFileInfo {
+    pub(crate) file_stem: String,
     parent_module_rel_path: Arc<RelPath>,
-    parent_module_file_name: String,
+    pub(crate) parent_module_file_name: String,
     worktree_id: WorktreeId,
 }
 
@@ -107,7 +107,7 @@ impl RustUnlinkedFileBanner {
         cx.notify();
     }
 
-    fn toolbar_location(&self) -> ToolbarItemLocation {
+    pub(crate) fn toolbar_location(&self) -> ToolbarItemLocation {
         if self.dismissed || !self.has_unlinked_diagnostic {
             ToolbarItemLocation::Hidden
         } else {
@@ -115,7 +115,7 @@ impl RustUnlinkedFileBanner {
         }
     }
 
-    fn attach_to_parent_module(&mut self, cx: &mut Context<Self>) {
+    pub(crate) fn attach_to_parent_module(&mut self, cx: &mut Context<Self>) {
         let Some(info) = self.current_file_info.take() else {
             return;
         };
