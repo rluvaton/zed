@@ -56,6 +56,23 @@ impl FileDiffView {
             let new_buffer = project
                 .update(cx, |project, cx| project.open_local_buffer(&new_path, cx))
                 .await?;
+            // If there's already a FileDiffView open for these buffers, activate it
+            let existing = workspace.update_in(cx, |workspace, window, cx| {
+                let existing = workspace
+                    .items_of_type::<FileDiffView>(cx)
+                    .find(|item| {
+                        let item = item.read(cx);
+                        item.old_buffer == old_buffer && item.new_buffer == new_buffer
+                    });
+                if let Some(existing) = existing.as_ref() {
+                    workspace.activate_item(existing, true, true, window, cx);
+                }
+                existing
+            })?;
+            if let Some(existing) = existing {
+                return Ok(existing);
+            }
+
             let languages = project.update(cx, |project, _| project.languages().clone());
 
             let buffer_diff = build_buffer_diff(&old_buffer, &new_buffer, languages, cx).await?;
@@ -97,6 +114,21 @@ impl FileDiffView {
             let new_buffer = project
                 .update(cx, |project, cx| project.open_buffer(path, cx))
                 .await?;
+
+            // If there's already a FileDiffView open for this buffer, activate it
+            let existing = workspace.update_in(cx, |workspace, window, cx| {
+                let existing = workspace
+                    .items_of_type::<FileDiffView>(cx)
+                    .find(|item| item.read(cx).new_buffer == new_buffer);
+                if let Some(existing) = existing.as_ref() {
+                    workspace.activate_item(existing, true, true, window, cx);
+                }
+                existing
+            })?;
+            if let Some(existing) = existing {
+                return Ok(existing);
+            }
+
             let buffer_diff = project
                 .update(cx, |project, cx| {
                     project.open_uncommitted_diff(new_buffer.clone(), cx)
